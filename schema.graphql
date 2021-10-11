@@ -1,0 +1,6 @@
+type Query {
+	"""
+	Return actual version of the application
+	"""
+	version: String!
+}
