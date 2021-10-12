@@ -13,8 +13,9 @@ interface IConfig {
   Query?: any;
   Mutation?: any;
   logs?: (version: string, port: number) => void;
-  middleware?: (ctx: Context, next: any) => Promise<void>;
+  middleware?: (ctx: Context, next: any) => any;
   authorization?: (user: string, password: string) => Promise<boolean>;
+  path?: string;
 }
 
 interface OptConfig extends IConfig {
@@ -52,7 +53,8 @@ export class GraphQLServer {
     Query: Query(this),
     Mutation: Mutation(this),
     middleware: async (_: Context, next: any) => await next(),
-    authorization: async () => await true
+    authorization: async () => await true,
+    path: "/graphql"
   };
 
   constructor(config?: OptConfig) {
@@ -76,6 +78,7 @@ export class GraphQLServer {
       Router,
       typeDefs: gql(this.config.schema),
       resolvers: getObject(this.config),
+      path: this.config.path,
       settings: {
         "request.credentials": "include"
       }
@@ -91,7 +94,9 @@ export class GraphQLServer {
       } else await next();
     });
     this.app.use(async (context: Context, next: any) => {
-      if (this.config.middleware)
+      if (context.request.url.pathname === this.config.path)
+        await next();
+      else if (this.config.middleware)
         await this.config.middleware(context, next);
     });
     this.app.use(GraphQLService.routes(), GraphQLService.allowedMethods());
