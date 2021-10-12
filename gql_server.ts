@@ -1,16 +1,20 @@
 // deno-lint-ignore-file no-explicit-any
 
-import { Application, Router, applyGraphQL, oakCors, killProcessOnPort, gql } from "./deps.ts";
+import { Application, Context, Router, applyGraphQL, oakCors, killProcessOnPort, gql } from "./deps.ts";
 import { SchemaAST } from "./gql_tools.ts";
 import Query from "./resolvers/query.ts";
 import Mutation from "./resolvers/mutation.ts";
 import files from "./files.ts";
+import { Session, CookieStore } from "https://deno.land/x/oak_sessions@v3.1.2/mod.ts";
+
+export { Context } from "./deps.ts";
 
 interface IConfig {
   Query?: any;
   Mutation?: any;
   logs?: (version: string, port: number) => void;
-  middleware?: (ctx: any) => void;
+  middleware?: (ctx: Context, next: any) => Promise<void>;
+  authorization?: (user: string, password: string) => Promise<boolean>;
 }
 
 interface OptConfig extends IConfig {
@@ -36,7 +40,7 @@ const getObject = (config: any) => {
 }
 
 export class GraphQLServer {
-  private app: any;
+  private app: Application;
   private config: Config = {
     version: "0.0.0",
     port: 80,
@@ -46,7 +50,9 @@ export class GraphQLServer {
       console.log(`Server running 🚀 http://localhost:${port}/graphql`);
     },
     Query: Query(this),
-    Mutation: Mutation(this)
+    Mutation: Mutation(this),
+    middleware: async (_: Context, next: any) => await next(),
+    authorization: async () => await true
   };
 
   constructor(config?: OptConfig) {
@@ -69,13 +75,26 @@ export class GraphQLServer {
     const GraphQLService = await applyGraphQL<Router>({
       Router,
       typeDefs: gql(this.config.schema),
-      resolvers: getObject(this.config)
+      resolvers: getObject(this.config),
+      settings: {
+        "request.credentials": "include"
+      }
+    });
+    const session = new Session(new CookieStore('very-secret-key'));
+    this.app.use(session.initMiddleware(), async (ctx: Context, next: any) => {
+      if (ctx.request.headers.get("Authorization"))
+        await ctx.state.session.set("token", atob(ctx.request.headers.get("Authorization")?.split(" ")[1] || ""));
+      const [ user, password ] = (await ctx.state.session.get("token"))?.split(":") || [];
+      if (this.config.authorization && !await this.config.authorization(user, password)) {
+        ctx.response.headers.set("WWW-Authenticate", "Basic");
+        ctx.response.status = 401;
+      } else await next();
+    });
+    this.app.use(async (context: Context, next: any) => {
+      if (this.config.middleware)
+        await this.config.middleware(context, next);
     });
     this.app.use(GraphQLService.routes(), GraphQLService.allowedMethods());
-    this.app.use((ctx: any) => {
-      if (this.config.middleware)
-        this.config.middleware(ctx);
-    });
     await killProcessOnPort(this.config.port);
     if (this.config.logs)
       this.config.logs(this.config.version, this.config.port);

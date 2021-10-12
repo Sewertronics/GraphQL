@@ -1,5 +1,5 @@
-export { Application, Router } from "https://deno.land/x/oak@v9.0.0/mod.ts";
-export { applyGraphQL } from "https://deno.land/x/oak_graphql@0.6.2/mod.ts";
+export { Application, Router, Context } from "https://deno.land/x/oak@v9.0.0/mod.ts";
+export { applyGraphQL } from "https://deno.land/x/oak_graphql2@0.7.0/mod.ts";
 export { encode, decode } from "https://deno.land/std@0.106.0/encoding/base64.ts";
 export { gql } from "https://deno.land/x/graphql_tag@0.0.1/mod.ts";
 export { oakCors } from "https://deno.land/x/cors@v1.2.2/mod.ts";
