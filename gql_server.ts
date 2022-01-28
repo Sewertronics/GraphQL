@@ -4,14 +4,17 @@ import { Application, Context, Router, applyGraphQL, oakCors, killProcessOnPort,
 import { SchemaAST } from "./gql_tools.ts";
 import Query from "./resolvers/query.ts";
 import Mutation from "./resolvers/mutation.ts";
+import Subscription from "./resolvers/subscription.ts";
 import files from "./files.ts";
 import { Session, CookieStore } from "https://deno.land/x/oak_sessions@v3.1.2/mod.ts";
+import { WebSocketServer } from "https://deno.land/x/websocket_server@1.0.2/mod.ts";
 
 export { Context } from "./deps.ts";
 
 interface IConfig {
   Query?: any;
   Mutation?: any;
+  Subscription?: any;
   logs?: (version: string, port: number) => void;
   middleware?: (ctx: Context, next: any) => any;
   authorization?: (user: string, password: string) => Promise<boolean>;
@@ -52,6 +55,7 @@ export class GraphQLServer {
     },
     Query: Query(this),
     Mutation: Mutation(this),
+    Subscription: Subscription(this),
     middleware: async (_: Context, next: any) => await next(),
     authorization: async () => await true,
     path: "/graphql"
@@ -69,7 +73,7 @@ export class GraphQLServer {
       else if (config?.[field])
         (this.config[field] as any) = config?.[field];
     });
-    this.app = new Application();
+    this.app = new Application;
     this.app.use(oakCors());
   }
 
@@ -84,7 +88,7 @@ export class GraphQLServer {
       }
     });
     const session = new Session(new CookieStore('very-secret-key'));
-    this.app.use(session.initMiddleware(), async (ctx: Context, next: any) => {
+    this.app.use(session.initMiddleware() as any, async (ctx: Context, next: any) => {
       if (ctx.request.headers.get("Authorization"))
         await ctx.state.session.set("token", atob(ctx.request.headers.get("Authorization")?.split(" ")[1] || ""));
       const [ user, password ] = (await ctx.state.session.get("token"))?.split(":") || [];
@@ -103,6 +107,9 @@ export class GraphQLServer {
     await killProcessOnPort(this.config.port);
     if (this.config.logs)
       this.config.logs(this.config.version, this.config.port);
+
+    // new WebSocketServer(this.app.server);
+
     await this.app.listen({
       port: this.config.port,
       signal: (new AbortController()).signal
